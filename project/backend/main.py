@@ -1,11 +1,11 @@
-from fastapi import FastAPI, File, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 import torch
 import torch.nn as nn
-import torchvision.transforms as transforms
+import torchvision.models as models
+from fastapi import FastAPI, File, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import io
-import numpy as np
+import torchvision.transforms as transforms
 
 app = FastAPI()
 
@@ -18,52 +18,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load the model
-def load_model():
-    model = DeepFakeDetector()
-    # In production, load pre-trained weights here
-    model.load_state_dict(torch.load("model.pth"))
-    model.eval()
-    return model
-
+# Define the DeepFakeDetector model (same as in training)
 class DeepFakeDetector(nn.Module):
     def __init__(self):
         super(DeepFakeDetector, self).__init__()
-        # Using EfficientNet as base model
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, padding=1)
-        self.bn1 = nn.BatchNorm2d(64)
-        self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
-        self.bn2 = nn.BatchNorm2d(128)
-        self.conv3 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
-        self.bn3 = nn.BatchNorm2d(256)
-        
-        self.pool = nn.MaxPool2d(2, 2)
-        self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.5)
-        
-        self.fc1 = nn.Linear(256 * 28 * 28, 512)
-        self.fc2 = nn.Linear(512, 1)
-        self.sigmoid = nn.Sigmoid()
+        self.mobilenet = models.mobilenet_v2(weights=None)  # Initialize without pretrained weights
+        self.mobilenet.classifier[1] = nn.Linear(self.mobilenet.classifier[1].in_features, 1)  # Binary classification
 
     def forward(self, x):
-        x = self.pool(self.relu(self.bn1(self.conv1(x))))
-        x = self.pool(self.relu(self.bn2(self.conv2(x))))
-        x = self.pool(self.relu(self.bn3(self.conv3(x))))
-        
-        x = x.view(-1, 256 * 28 * 28)
-        x = self.relu(self.fc1(x))
-        x = self.dropout(x)
-        x = self.fc2(x)
-        x = self.sigmoid(x)
-        
-        return x
+        return self.mobilenet(x)
+
+# Load the model
+def load_model():
+    model = DeepFakeDetector()
+    checkpoint = torch.load("./weights/best_model (1).pth", map_location=torch.device('cpu'))
+    new_state_dict = {k.replace("_orig_mod.", ""): v for k, v in checkpoint.items()}
+
+    model.load_state_dict(new_state_dict, strict=True)  # strict=True ensures all keys match exactly
+    
+    model.eval()
+    return model
 
 model = load_model()
+
+# Debugging: Check expected and loaded keys
+checkpoint = torch.load("./weights/best_model (1).pth", map_location=torch.device('cpu'))
+print("Checkpoint Keys:", checkpoint.keys())  # Check saved keys
+print("Model State Dict Keys:", model.state_dict().keys())  # Check expected keys
+
+# Define transformation
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], 
-                       std=[0.229, 0.224, 0.225])
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
 @app.post("/analyze")
@@ -71,16 +58,17 @@ async def analyze_image(file: UploadFile = File(...)):
     # Read image
     contents = await file.read()
     image = Image.open(io.BytesIO(contents)).convert('RGB')
-    
+
     # Preprocess
     image_tensor = transform(image).unsqueeze(0)
-    
+
     # Inference
     with torch.no_grad():
-        output = model(image_tensor)
-        probability = output.item()
-    
+        output = model(image_tensor).squeeze()
+        probability = torch.sigmoid(output).item()
+    print(f"Probability: {probability}, isDeepfake: {probability < 0.5}")
     return {
-        "isDeepfake": probability > 0.5,
+        "isDeepfake": probability < 0.5,
         "confidence": float(probability * 100)
     }
+    
