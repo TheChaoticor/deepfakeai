@@ -72,7 +72,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
-      {/* Hero Section */}
+      
       <header className="container mx-auto px-6 py-16">
         <nav className="flex justify-between items-center mb-16">
           <div className="flex items-center space-x-2">
@@ -130,7 +130,7 @@ function App() {
         </div>
       </header>
 
-      {/* Features Section */}
+     
       <section id="features" className="bg-gray-800 py-20">
         <div className="container mx-auto px-6">
           <h2 className="text-3xl font-bold text-center mb-16">
@@ -156,7 +156,7 @@ function App() {
         </div>
       </section>
 
-      {/* Demo Section */}
+      
       <section id="demo" className="py-20">
         <div className="container mx-auto px-6">
           <h2 className="text-3xl font-bold text-center mb-16">
@@ -271,7 +271,7 @@ function App() {
         </div>
       </section>
 
-      {/* Footer */}
+      
       <footer className="bg-gray-900 py-12">
         <div className="container mx-auto px-6">
           <div className="flex justify-between items-center">
